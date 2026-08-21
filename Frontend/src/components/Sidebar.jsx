@@ -69,7 +69,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             <NavLink
               key={link.path}
               to={isLoggedIn ? link.path : "/login"}
-              onClick={() => { setIsOpen(false), handleNavClick }}
+              onClick={() => handleNavClick(link.path)}
               className={({ isActive }) =>
                 `flex items-center gap-4 px-4 py-3 rounded-radius border-l-4 transition-all ${
                   isActive

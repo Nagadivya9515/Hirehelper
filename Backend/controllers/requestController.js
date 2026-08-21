@@ -1,52 +1,55 @@
 import Request from "../models/Request.js";
 import Task from "../models/Task.js";
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
 
 export const getUserRequests = async (req, res) => {
   res.status(200).json({ msg: "Empty" });
 };
 
 export const sendRequest = async (req, res) => {
-  const { taskId, message } = req.body;
+  try {
+    const { taskId, message } = req.body;
 
-  const task = await Task.findById(taskId);
-  if (!task) {
-    return res.status(400).json({ message: "Task not available" });
-  }
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(400).json({ message: "Task not available" });
+    }
 
-  if (task.userId.toString() === req.userId) {
-    return res.status(400).json({ message: "Cannot request your own task" });
-  }
+    if (task.userId.toString() === req.userId) {
+      return res.status(400).json({ message: "Cannot request your own task" });
+    }
 
-  const existing = await Request.findOne({
-    taskId,
-    requesterId: req.userId
-  });
+    const existing = await Request.findOne({
+      taskId,
+      requesterId: req.userId
+    });
 
-  if (existing) {
-    return res.status(409).json({ message: "Request already sent" });
-  }
+    if (existing) {
+      return res.status(409).json({ message: "Request already sent" });
+    }
 
-  const request = await Request.create({
-    taskId,
-    requesterId: req.userId,
-    taskOwnerId: task.userId,
-    message: message || "I'd like to help with this task",
-    status: "pending"
-  });
+    const request = await Request.create({
+      taskId,
+      requesterId: req.userId,
+      taskOwnerId: task.userId,
+      message: message || "I'd like to help with this task",
+      status: "pending"
+    });
 
-  await request.save();
+    const requester = await User.findById(req.userId).select("name");
 
-  if (task.userId.toString() !== req.userId) {
     await Notification.create({
       userId: task.userId,
       type: "TASK_REQUEST",
-      message: `${req.userId} has requested to help with your task`,
+      message: `${requester?.name || "Someone"} has requested to help with your task`,
       relatedTask: taskId
     });
-  }
 
-  res.status(201).json({ message: "Request sent", request });
+    res.status(201).json({ message: "Request sent", request });
+  } catch (error) {
+    res.status(500).json({ message: "Error sending request" });
+  }
 };
 
 export const getReceivedRequests = async (req, res) => {
@@ -76,35 +79,39 @@ export const getMyRequests = async (req, res) => {
 };
 
 export const updateRequestStatus = async (req, res) => {
-  const { status } = req.body;
+  try {
+    const { status } = req.body;
 
-  const request = await Request.findById(req.params.id);
+    const request = await Request.findById(req.params.id);
 
-  if (!request || request.taskOwnerId.toString() !== req.userId) {
-    return res.status(403).json({ message: "Unauthorized" });
+    if (!request || request.taskOwnerId.toString() !== req.userId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    request.status = status;
+    await request.save();
+
+    if (status === "accepted") {
+      await Notification.create({
+        userId: request.requesterId,
+        type: "TASK_ACCEPTED",
+        message: "Your request was accepted 🎉",
+        relatedTask: request.taskId
+      });
+    }
+
+    if (status === "rejected") {
+      await Notification.create({
+        userId: request.requesterId,
+        type: "TASK_REJECTED",
+        message: "Your task request has been rejected",
+        relatedTask: request.taskId
+      });
+    }
+
+    res.json({ message: "Request updated", request });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating request" });
   }
-
-  request.status = status;
-  await request.save();
-
-  if (status === "accepted") {
-    await Notification.create({
-      userId: request.requesterId,
-      type: "TASK_ACCEPTED",
-      message: "Your request was accepted 🎉",
-      relatedTask: request.taskId
-    });
-  }
-
-  if (status === "rejected") {
-    await Notification.create({
-      userId: request.requesterId,
-      type: "TASK_REJECTED",
-      message: "Your task request has been rejected",
-      relatedTask: request.taskId
-    });
-  }
-
-  res.json({ message: "Request updated", request });
 };
 

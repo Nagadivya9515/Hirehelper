@@ -151,7 +151,17 @@ export const forgotPassword = async (req, res) => {
     user.otpExpires = otpExpires;
     await user.save();
 
-    console.log("Password reset OTP:", otp);
+    await transporter.sendMail({
+      from: `"Auth App" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Password Reset OTP",
+      html: `
+        <h2>Password Reset</h2>
+        <p>Your OTP is:</p>
+        <h1>${otp}</h1>
+        <p>This OTP is valid for 5 minutes.</p>
+      `
+    });
 
     res.json({
       success: true,
